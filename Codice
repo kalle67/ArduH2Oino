@@ -1,0 +1,245 @@
+int led = 13; // Led on/off colore blu
+int co2 = 2; // al relè avvio CO2
+int ledco2 = 10; // al led funzionamento riscaldatore colore giallo
+int releriscaldatore = 4; //rele riscaldatore
+int ledriscaldatore = 12; //led funzionamento riscaldatore colore rosso
+int releventole = 7; //rele ventole
+int ledventole = 8; //led azionamento ventole colore verde
+byte timeON = 13;    // ora di accensione co2
+byte timeOFF = 21;  // ora di spegnimento co2
+byte timeON10 = 14; //ora accensione retroilluminazione lcd
+byte timeOFF10 = 23; // ora spegnimento retroilluminazione lcd
+#include <Wire.h>
+#include <LCD.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <DS3232RTC.h> //http://github.com/JChristensen/DS3232RTC
+#include <Time.h>      //http://www.arduino.cc/playground/Code/Time 
+#define ONE_WIRE_BUS 14
+OneWire ourWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&ourWire);
+#include <dht11.h>
+dht11 DHT11;
+#define DHT11PIN 15
+#define I2C_ADDR    0x27
+#define BACKLIGHT_PIN     3
+#define En_pin  2
+#define Rw_pin  1
+#define Rs_pin  0
+#define D4_pin  4
+#define D5_pin  5
+#define D6_pin  6
+#define D7_pin  7
+LiquidCrystal_I2C	lcd(I2C_ADDR, En_pin, Rw_pin, Rs_pin, D4_pin, D5_pin, D6_pin, D7_pin);
+void setup()
+{
+	pinMode(led, OUTPUT);
+	pinMode(releriscaldatore, OUTPUT);
+	pinMode(ledriscaldatore, OUTPUT);
+	pinMode(releventole, OUTPUT);
+	pinMode(ledventole, OUTPUT);
+	pinMode(co2, OUTPUT);
+	pinMode(ledco2, OUTPUT);
+	{
+		Serial.begin(9600);
+		Serial.println("Misura la temperatura con sensore DS18B20");
+		Serial.println("continua la misurazione");
+		delay(10000);
+	}
+	sensors.begin();
+	Serial.begin(9600);
+	Serial.println();
+	lcd.begin (20, 4);
+	lcd.setBacklightPin(BACKLIGHT_PIN, POSITIVE);
+
+	Wire.begin();
+	Serial.begin(9600);
+	setSyncProvider(RTC.get);   // the function to get the time from the RTC
+	if(timeStatus() != timeSet)
+		Serial.println("Unable to sync with the RTC");
+	else
+		Serial.println("RTC has set the system time");
+	Serial.begin(9600);
+	Serial.println("DHT11 TEST PROGRAM ");
+	Serial.print("LIBRARY VERSION: ");
+	Serial.println(DHT11LIB_VERSION);
+	Serial.println();
+}
+
+void loop()
+{
+	digitalWrite(led, OUTPUT);
+	if ((hour() >= timeON10) && (hour() < timeOFF10))lcd.setBacklight(HIGH) ;  // attiva retroilluminazione lcd
+	else lcd.setBacklight(LOW);  // disattiva retroilluminazione lcd
+	//lcd.setBacklight(HIGH);
+	Serial.println();
+	sensors.requestTemperatures();
+	delay(60000);//tempo di attesa per nuova lettura temperatura acquario
+	Serial.print("Temperatura = ");
+	Serial.print(sensors.getTempCByIndex(0));
+	Serial.println(" gradi C");
+	lcd.home ();                   // go home
+	lcd.print("");
+	if (day() < 10)
+	{
+		lcd.print("0");
+
+	}
+	lcd.print((day()));
+	lcd.print("/");
+	if (month() < 10)
+	{
+		lcd.print("0");
+	}
+	lcd.print((month()));
+	lcd.print("/");
+	lcd.print((year()));
+	lcd.print(" ");
+	lcd.print("Ore ");
+	lcd.print((hour()));
+	lcd.print(":");
+	if (minute() < 10)
+	{
+		lcd.print("0");
+	}
+	lcd.print((minute()));
+	lcd.setCursor ( 0, 1 );        // go to the 2nd line
+	lcd.print("Acquario: C ");
+	lcd.print(sensors.getTempCByIndex(0));
+	lcd.setCursor ( 0, 2 );        // go to the third line
+	lcd.print("EXT C ");
+	lcd.print((float)DHT11.temperature, 2);
+	lcd.print(" % ");
+	lcd.print((float)DHT11.humidity, 2);
+	lcd.setCursor ( 0, 3 );  // go to the fourth line
+	if (sensors.getTempCByIndex(0) < 28.00)
+	{
+		lcd.print("     Status ok");
+	}
+	else
+	{
+		lcd.home ();                   // go home
+		lcd.print("abbassa temperatura");
+	}
+
+	if (sensors.getTempCByIndex(0) < 25.00)
+	{
+		digitalWrite(releriscaldatore, LOW);
+		digitalWrite(ledriscaldatore, HIGH);
+	}
+	else
+	{
+		digitalWrite(releriscaldatore, HIGH);
+		digitalWrite(ledriscaldatore, LOW);
+	}
+	if (sensors.getTempCByIndex(0) > 29.00)
+	{
+		{
+			digitalWrite(releventole, LOW);
+			digitalWrite(ledventole, HIGH);
+		}
+	}
+	else
+	{
+		digitalWrite(releventole, HIGH);
+		digitalWrite(ledventole, LOW);
+	}
+	digitalClockDisplay();
+
+}
+
+void digitalClockDisplay(void)
+{
+	// digital clock display of the time
+	Serial.print(hour());
+	printDigits(minute());
+	printDigits(second());
+	Serial.print(' ');
+	Serial.print(day());
+	Serial.print(' ');
+	Serial.print(month());
+	Serial.print(' ');
+	Serial.print(year());
+	Serial.println();
+}
+
+void printDigits(int digits)
+{
+	Serial.print(':');
+	if(digits < 10)
+		Serial.print('0');
+	Serial.print(digits);
+	if ((hour() >= timeON) && (hour() < timeOFF))
+	{
+		digitalWrite(co2, LOW);  // attiva relè
+		digitalWrite(ledco2, HIGH);
+	}
+	else
+	{
+		digitalWrite(co2, HIGH);  // disattiva relè
+		digitalWrite(ledco2, LOW);
+	}
+
+
+	Serial.println("\n");
+	int chk = DHT11.read(DHT11PIN);
+	Serial.print("Read sensor: ");
+	switch (chk)
+	{
+		case 0:
+			Serial.println("OK");
+			break;
+		case -1:
+			Serial.println("Checksum error");
+			break;
+		case -2:
+			Serial.println("Time out error");
+			break;
+		default:
+			Serial.println("Unknown error");
+			break;
+	}
+
+	Serial.print("Humidity (%): ");
+	Serial.println((float)DHT11.humidity, 2);
+
+	Serial.print("Temperature (oC): ");
+	Serial.println((float)DHT11.temperature, 2);
+
+
+}
+double Fahrenheit(double celsius)
+{
+	return 1.8 * celsius + 32;
+}
+
+//Celsius to Kelvin conversion
+double Kelvin(double celsius)
+{
+	return celsius + 273.15;
+}
+double dewPoint(double celsius, double humidity)
+{
+	double A0 = 373.15 / (273.15 + celsius);
+	double SUM = -7.90298 * (A0 - 1);
+	SUM += 5.02808 * log10(A0);
+	SUM += -1.3816e-7 * (pow(10, (11.344 * (1 - 1 / A0))) - 1) ;
+	SUM += 8.1328e-3 * (pow(10, (-3.49149 * (A0 - 1))) - 1) ;
+	SUM += log10(1013.246);
+	double VP = pow(10, SUM - 3) * humidity;
+	double T = log(VP / 0.61078); // temp var
+	return (241.88 * T) / (17.558 - T);
+}
+
+double dewPointFast(double celsius, double humidity)
+{
+	double a = 17.271;
+	double b = 237.7;
+	double temp = (a * celsius) / (b + celsius) + log(humidity / 100);
+	double Td = (b * temp) / (a - temp);
+	return Td;
+
+
+
+}
